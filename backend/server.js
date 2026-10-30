@@ -43,6 +43,11 @@ const getAllowedOrigins = () => {
     origins.push(...configuredOrigins);
   }
 
+  // Ensure production deployed Vercel frontend origin is always in the whitelist
+  if (!origins.includes('https://privyshield-ai.vercel.app')) {
+    origins.push('https://privyshield-ai.vercel.app');
+  }
+
   return origins;
 };
 
@@ -56,8 +61,9 @@ const corsOptions = {
     const normalizedOrigin = origin.trim().replace(/\/+$/, '');
     const allowedOrigins = getAllowedOrigins();
 
-    // Verify exact match against authorized origins
-    if (allowedOrigins.includes(normalizedOrigin)) {
+    // Verify exact match against authorized origins or Vercel deployment subdomain
+    if (allowedOrigins.includes(normalizedOrigin) ||
+        (normalizedOrigin.startsWith('https://privyshield-ai') && normalizedOrigin.endsWith('.vercel.app'))) {
       return callback(null, true);
     }
 

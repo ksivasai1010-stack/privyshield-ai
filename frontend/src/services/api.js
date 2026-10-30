@@ -1,11 +1,28 @@
 import axios from 'axios';
 
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
-const cleanBaseUrl = rawBaseUrl.trim().replace(/\/+$/, '');
-// Normalize URL so it always points to the /api endpoint
-const API_BASE_URL = cleanBaseUrl.endsWith('/api')
-  ? cleanBaseUrl
-  : (cleanBaseUrl.startsWith('http') ? `${cleanBaseUrl}/api` : cleanBaseUrl);
+// Determine API Base URL dynamically
+const getBaseApiUrl = () => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+
+  // 1. If explicitly set via environment variable, normalize and use it
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
+    const clean = envUrl.trim().replace(/\/+$/, '');
+    return clean.endsWith('/api') ? clean : (clean.startsWith('http') ? `${clean}/api` : clean);
+  }
+
+  // 2. In browser production (e.g. deployed on Vercel), default to the production Render backend
+  const isBrowser = typeof window !== 'undefined';
+  const isLocalHost = isBrowser && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+  if (import.meta.env.PROD || (isBrowser && !isLocalHost)) {
+    return 'https://privyshield-ai.onrender.com/api';
+  }
+
+  // 3. Local development fallback
+  return '/api';
+};
+
+const API_BASE_URL = getBaseApiUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
