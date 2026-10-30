@@ -18,38 +18,74 @@ app.use(helmet({
 }));
 
 // CORS Configuration
-const getOrigins = () => {
-  const origins = ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5000'];
-  if (process.env.FRONTEND_URL) {
-    const customOrigins = process.env.FRONTEND_URL.split(',').map(url => url.trim().replace(/\/$/, ''));
-    origins.push(...customOrigins);
+const isProduction = process.env.NODE_ENV === 'production';
+
+const getAllowedOrigins = () => {
+  const origins = [];
+
+  // In development mode, allow local development frontend servers
+  if (!isProduction) {
+    origins.push(
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://localhost:5000',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:3000'
+    );
   }
-  return origins.filter(Boolean);
+
+  // In production, strictly allow the configured FRONTEND_URL origin(s)
+  if (process.env.FRONTEND_URL) {
+    const configuredOrigins = process.env.FRONTEND_URL
+      .split(',')
+      .map(url => url.trim().replace(/\/+$/, ''))
+      .filter(Boolean);
+    origins.push(...configuredOrigins);
+  }
+
+  return origins;
 };
 
-const allowedOrigins = getOrigins();
-
-app.use(cors({
+const corsOptions = {
   origin: (origin, callback) => {
-    // Allow non-browser requests (e.g. curl, health checks)
-    if (!origin) return callback(null, true);
-
-    const normalizedOrigin = origin.replace(/\/$/, '');
-    const isAllowed = allowedOrigins.includes(normalizedOrigin) ||
-      (process.env.NODE_ENV !== 'production') ||
-      normalizedOrigin.endsWith('.vercel.app') ||
-      normalizedOrigin.endsWith('.onrender.com');
-
-    if (isAllowed) {
+    // Allow non-browser requests (e.g. mobile apps, curl, uptime/health probes)
+    if (!origin) {
       return callback(null, true);
     }
-    return callback(new Error(`CORS policy: Origin ${origin} not allowed by CORS`));
+
+    const normalizedOrigin = origin.trim().replace(/\/+$/, '');
+    const allowedOrigins = getAllowedOrigins();
+
+    // Verify exact match against authorized origins
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
+
+    // In development only, allow localhost variants if not explicitly in list
+    if (!isProduction && (normalizedOrigin.includes('localhost') || normalizedOrigin.includes('127.0.0.1'))) {
+      return callback(null, true);
+    }
+
+    // Explicitly reject unauthorized origins
+    return callback(new Error(`CORS policy violation: Origin '${origin}' is not authorized.`));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-app.options('*', cors());
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400, // 24 hours preflight cache
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+// Handle OPTIONS preflight across all endpoints
+app.options('*', cors(corsOptions));
 
 // Request parsing with safe payload limits
 app.use(express.json({ limit: '2mb' }));
@@ -85,6 +121,13 @@ app.use((req, res) => {
 // Global Centralized Error Handler (Never expose internal stack traces or secrets)
 app.use((err, req, res, next) => {
   console.error('[PrivyShield Error]', err.message);
+
+  if (err.message && err.message.includes('CORS policy violation')) {
+    return res.status(403).json({
+      success: false,
+      message: err.message
+    });
+  }
 
   const statusCode = err.status || 500;
   const message = statusCode === 500 ? 'A secure internal processing error occurred.' : err.message;
