@@ -1,0 +1,14 @@
+{
+  "name": "privyshield-ai-root",
+  "version": "1.0.0",
+  "description": "PrivyShield AI - Intelligent AI Privacy Firewall & Security Platform",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:all": "concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "backend": "npm --prefix backend run dev",
+    "frontend": "npm --prefix frontend run dev",
+    "start": "npm --prefix backend start",
+    "build": "npm --prefix frontend run build"
+  }
+}
